@@ -1,0 +1,7 @@
+interface:
+  display_name: "公众号草稿"
+  short_description: "公众号平台稿的预览、Wenyan 输入和草稿箱上传 adapter。"
+  default_prompt: "当已有数据工作区 platforms/wechat/ 平台稿并需要公众号发布准备时，使用 $wechat-draft 检查文章，生成 Wenyan 可用输入，并且只在预览确认后创建草稿箱上传；完整社交内容流程优先交给 $social-publishing-workflow 编排。"
+
+policy:
+  allow_implicit_invocation: true
