@@ -57,12 +57,30 @@ function isDir(path) {
 function checkGit(path) {
   const gitPath = join(path, ".git");
   if (!existsSync(gitPath)) return "missing";
-  return statSync(gitPath).isDirectory() ? "repo" : "submodule";
+  return statSync(gitPath).isDirectory() ? "repo" : "linked-repo";
 }
 
 function commandExists(command) {
   const result = spawnSync("which", [command], { encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function trackedByRootGit(path) {
+  const result = spawnSync("git", ["ls-files", "--error-unmatch", "--", path], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
+
+function ignoredByRootGit(path) {
+  const result = spawnSync("git", ["check-ignore", "-q", path], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: "ignore",
+  });
+  return result.status === 0;
 }
 
 const config = readJson(configPath, { workspacePath: "workspace" });
@@ -92,7 +110,13 @@ if (!isDir(workspace)) {
   problems.push(`workspacePath does not exist or is not a directory: ${workspacePath}`);
 } else {
   const gitState = checkGit(workspace);
-  if (gitState === "missing") warnings.push(`${workspacePath} is not a Git repository or submodule`);
+  if (gitState === "missing") warnings.push(`${workspacePath} is not a Git repository`);
+  if (trackedByRootGit(workspacePath)) {
+    problems.push(`${workspacePath} is tracked by the ArcSocial repository; keep personal workspaces untracked`);
+  }
+  if (!ignoredByRootGit(workspacePath)) {
+    warnings.push(`${workspacePath} is not ignored by the ArcSocial repository`);
+  }
   for (const dir of requiredDirs) {
     if (!isDir(join(workspace, dir))) problems.push(`missing workspace directory: ${workspacePath}/${dir}`);
   }

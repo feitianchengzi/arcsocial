@@ -30,8 +30,10 @@ ArcSocial does not store real secrets or access tokens.
 
 ## First-Time Setup
 
-First prepare a personal data workspace. Recommended setup from the ArcSocial
-project root:
+First prepare a personal data workspace. The recommended setup is to clone any
+personal content Git repository into `workspace/` from the ArcSocial project
+root. `workspace/` is personal data, is not part of the ArcSocial open-source
+repository, and is ignored by default:
 
 ```bash
 node tools/scripts/init-workspace.mjs --repo <your-content-repo-url> --path workspace
@@ -103,13 +105,14 @@ This repository is the ArcSocial open-source project itself.
   workflows.
 - `templates/workspace/` contains the clean starter template for personal data
   repositories.
-- `workspace/` is the recommended personal data mount point, usually as a Git
-  submodule. It is not part of the ArcSocial open-source project itself.
+- `workspace/` is the recommended personal data mount point. It is ignored by
+  the ArcSocial repository and must not be committed to the open-source project.
 
-User content should live in any independent Git repository mounted into
-ArcSocial as a submodule. That data repository can be created from
-`templates/workspace/`, or it can be an existing repository that follows the
-ArcSocial read/write contract.
+User content should live in any independent Git repository mounted locally as
+`workspace/`. Do not commit `.gitmodules`, a `workspace` submodule, or personal
+content repository bindings to the ArcSocial open-source repository. That data
+repository can be created from `templates/workspace/`, or it can be an existing
+repository that follows the ArcSocial read/write contract.
 
 ## Structure
 
@@ -121,7 +124,7 @@ playbooks/             Reusable workflows, prompts, checklists, and experiments.
 skills/                Future portable skill/package material.
 tools/                 Scripts, apps, and tool configuration.
 templates/workspace/   Clean starter content workspace for users.
-workspace/             Recommended personal data submodule mount point.
+workspace/             Ignored personal data mount point.
 ```
 
 The internal structure of `workspace/` is an agent read/write contract. Users

@@ -64,7 +64,7 @@ if (existsSync(target)) {
 }
 
 if (repo) {
-  run("git", ["submodule", "add", repo, workspacePath]);
+  run("git", ["clone", repo, workspacePath]);
 } else {
   const template = join(root, "templates", "workspace");
   if (!existsSync(template)) fail("templates/workspace is missing");

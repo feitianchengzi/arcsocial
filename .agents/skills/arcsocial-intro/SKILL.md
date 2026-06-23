@@ -24,7 +24,7 @@ ArcSocial 是一个面向 Agent 协作的开源社交内容工作区。它不是
 - ArcSocial 项目本体提供 agent skills、发布流程、检查脚本、模板和平台 adapter。
 - 用户自己的文章、素材、平台稿、发布记录和指标数据放在数据工作区。
 - 默认数据工作区是 `workspace/`；可通过 `arcsocial.config.json` 的 `workspacePath` 修改。
-- 推荐把 `workspace/` 配置成用户自己的 Git 仓库 submodule，支持任意 Git 仓库。
+- 推荐把 `workspace/` 配置成用户自己的本地 Git 工作区；它是个人数据挂载点，不提交到 ArcSocial 开源仓库。
 
 ## 当前平台支持
 
@@ -42,7 +42,7 @@ ArcSocial 是一个面向 Agent 协作的开源社交内容工作区。它不是
 
 ### 1. 工作区准备
 
-如果用户已有个人内容 Git 仓库：
+如果用户已有个人内容 Git 仓库，默认克隆到被主仓库忽略的 `workspace/`：
 
 ```bash
 node tools/scripts/init-workspace.mjs --repo <your-content-repo-url> --path workspace
