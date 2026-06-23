@@ -12,5 +12,4 @@
 - Prefer direct sentences.
 - Explain tradeoffs instead of making broad claims.
 - Use examples when an idea could be misunderstood.
-- Keep platform-specific tone in `platforms/`, not in the canonical draft.
-
+- Keep platform-specific tone in `<workspacePath>/platforms/`, not in the canonical draft.

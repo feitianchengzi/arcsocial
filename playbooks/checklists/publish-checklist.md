@@ -1,5 +1,8 @@
 # Publish Checklist
 
+This is an ArcSocial project-level checklist. Apply it to the article, platform
+draft, assets, and publishing records under `<workspacePath>`.
+
 ## Content
 
 - [ ] The post has one clear point.
@@ -18,6 +21,5 @@
 
 - [ ] No placeholder text remains.
 - [ ] No private notes or internal links are exposed.
-- [ ] Tone matches `docs/voice.md`.
-- [ ] Final version is archived after publishing.
-
+- [ ] Tone matches the project-level voice guide `docs/voice.md`.
+- [ ] Final version is archived under `<workspacePath>/content/published/` after publishing.

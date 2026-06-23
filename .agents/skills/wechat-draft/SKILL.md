@@ -94,7 +94,7 @@ arckit/publishing/_shared/
 只有本 skill 需要自身状态时，才使用用户级上层文件：
 
 ```text
-~/.arckit/AgentWorkspace/social-ops/wechat/
+~/.arckit/AgentWorkspace/arcsocial/wechat/
 ```
 
 `wenyan-mcp` 的凭证、API key、服务地址和环境变量遵循 `wenyan-mcp` 文档。仓库可以保存示例或 schema，但绝不保存真实 secret 或 token。

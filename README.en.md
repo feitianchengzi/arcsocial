@@ -1,29 +1,112 @@
 # ArcSocial
 
-ArcSocial is an open-source, agent-assisted social publishing workspace. Users
-work directly from the ArcSocial project root, while personal articles, assets,
-platform drafts, and metrics live in a Git submodule mounted as the data
-workspace.
+ArcSocial is an open-source, agent-assisted social content workspace. It is not
+a Web/App service and does not need a long-running server. Users work directly
+from the ArcSocial project root with an agent to plan topics, write drafts,
+adapt content for platforms, preview posts, and prepare publishing.
+
+The ArcSocial project stores reusable capabilities: agent skills, publishing
+workflows, check scripts, templates, and platform adapters. User articles,
+assets, platform drafts, publishing records, and metrics live in a separate data
+workspace mounted as `workspace/` by default.
 
 Chinese README: [README.md](README.md).
 
+## Current Support
+
+- General writing workflow: from raw ideas to canonical drafts, then to
+  platform-specific drafts.
+- WeChat Official Account: full adapter for local checks, preview generation,
+  Wenyan-ready Markdown, and confirmed draft-box creation.
+- Other social platforms: ArcSocial can generate platform-specific drafts. If a
+  platform adapter does not exist, it stops at "platform draft ready" instead of
+  pretending remote publishing is supported.
+
+WeChat draft-box creation uses the open-source
+[`wenyan-mcp`](https://github.com/caol64/wenyan-mcp) foundation. Follow its
+official README for installation, `WECHAT_APP_ID` / `WECHAT_APP_SECRET`
+configuration, IP whitelist requirements, local mode, and server mode.
+ArcSocial does not store real secrets or access tokens.
+
+## First-Time Setup
+
+First prepare a personal data workspace. Recommended setup from the ArcSocial
+project root:
+
+```bash
+node tools/scripts/init-workspace.mjs --repo <your-content-repo-url> --path workspace
+node tools/scripts/doctor.mjs
+```
+
+If you do not have a personal content repository yet, create a local workspace
+from the template:
+
+```bash
+node tools/scripts/init-workspace.mjs --new --path workspace
+node tools/scripts/doctor.mjs
+```
+
+The default workspace path is configured in `arcsocial.config.json`:
+
+```json
+{
+  "workspacePath": "workspace"
+}
+```
+
+If you change the workspace path, keep `init-workspace.mjs --path` and
+`arcsocial.config.json` aligned.
+
+## Platform Configuration
+
+After initialization, run `doctor`. It checks the workspace boundary, required
+workspace directories, `wenyan-mcp`, `WECHAT_APP_ID`, and
+`WECHAT_APP_SECRET`.
+
+For WeChat Official Account publishing, configure credentials and IP whitelist
+according to the `wenyan-mcp` README. Do not commit `WECHAT_APP_ID`,
+`WECHAT_APP_SECRET`, `appsecret`, or `access_token` to Git.
+
+## Daily Use
+
+Users do not need to understand every project directory first. Tell the agent
+what content you want to create, which platform you want to publish to, and what
+stage you are at. The agent should create drafts, generate platform versions,
+prepare previews, and stop for confirmation when needed.
+
+Examples:
+
+```text
+Use ArcSocial to turn this idea into a WeChat Official Account article: ...
+```
+
+```text
+Continue workspace/content/drafts/2026-06-23-example.md and prepare it for WeChat.
+```
+
+```text
+Check whether this WeChat draft is ready to publish and generate a local preview.
+```
+
+```text
+Adapt this canonical draft for X and WeChat.
+```
+
 ## Project Boundary
 
-This repository is the open-source project itself.
+This repository is the ArcSocial open-source project itself.
 
-- `.agents/skills/` stores the reusable agent skills.
+- `.agents/skills/` stores reusable agent skills.
 - `arckit/` stores this project's ArcKit governance artifacts and project
   memory. It is part of the open-source project, not user content data.
-- `docs/`, `playbooks/`, `skills/`, and `tools/` document and support the
-  reusable workflow.
-- `templates/workspace/` contains the clean starter template for personal
-  content data repositories.
-- `workspace/` is the recommended mount point for the personal data repository.
-  It is usually a Git submodule and is not part of the ArcSocial open-source
-  project itself.
+- `docs/`, `playbooks/`, `skills/`, and `tools/` document and support reusable
+  workflows.
+- `templates/workspace/` contains the clean starter template for personal data
+  repositories.
+- `workspace/` is the recommended personal data mount point, usually as a Git
+  submodule. It is not part of the ArcSocial open-source project itself.
 
-User articles, personal drafts, publishing assets, metrics, and private
-platform data should live in any independent Git repository mounted into
+User content should live in any independent Git repository mounted into
 ArcSocial as a submodule. That data repository can be created from
 `templates/workspace/`, or it can be an existing repository that follows the
 ArcSocial read/write contract.
@@ -41,53 +124,9 @@ templates/workspace/   Clean starter content workspace for users.
 workspace/             Recommended personal data submodule mount point.
 ```
 
-## Initialize A Personal Data Workspace
-
-Recommended setup from the ArcSocial project root:
-
-```bash
-node tools/scripts/init-workspace.mjs --repo <your-content-repo-url> --path workspace
-```
-
-If you do not have a personal data repository yet, create one from
-`templates/workspace/`:
-
-```bash
-node tools/scripts/init-workspace.mjs --new --path workspace
-```
-
-ArcSocial writing, adaptation, preview, and publishing workflows should read
-and write data under `workspace/`, not personal content in the open-source
-project root.
-
-After initialization, run:
-
-```bash
-node tools/scripts/doctor.mjs
-```
-
-## Content Flow
-
-In the `workspace/` data repository:
-
-1. Capture raw ideas, references, and materials in `inbox/`.
-2. Move promising items into `content/drafts/` using `content/drafts/_template.md`.
-3. Adapt drafts for each platform under `platforms/`.
-4. Move release-ready content into `content/ready/`.
-5. After publishing, archive final copy in `content/published/`.
-6. Store platform previews, publishing preparation artifacts, and non-secret result records in `publishing/`.
-7. Record performance or observations in `data/metrics/` and `playbooks/experiments/`.
-
-## WeChat Official Account Publishing
-
-Final WeChat Official Account draft creation uses the open-source
-[`wenyan-mcp`](https://github.com/caol64/wenyan-mcp) foundation. Follow its
-official README for installation, `WECHAT_APP_ID` / `WECHAT_APP_SECRET`
-configuration, IP whitelist requirements, local mode, and server mode.
-
-`workspace/` may store article source, preview artifacts, and non-secret
-publishing records. Do not commit `WECHAT_APP_ID`, `WECHAT_APP_SECRET`,
-`appsecret`, or `access_token`.
+The internal structure of `workspace/` is an agent read/write contract. Users
+usually do not need to memorize it; inspect `templates/workspace/` only when
+debugging or doing manual maintenance.
 
 ## Naming
 
@@ -96,21 +135,3 @@ Use date-first names for content files:
 ```text
 YYYY-MM-DD-topic.md
 ```
-
-Examples:
-
-```text
-2026-05-24-agent-workflow.md
-2026-05-24-agent-workflow-x.md
-2026-05-24-agent-workflow-wechat.md
-```
-
-## Operating Rules
-
-- `inbox/` can be messy; everything else should be intentional.
-- `content/drafts/` stores the canonical idea before platform adaptation.
-- `platforms/` stores platform-specific copy, structure, and constraints.
-- `assets/` stores source materials and reusable media, not final post text.
-- `publishing/` stores platform publishing preparation artifacts and non-secret result records.
-- `playbooks/` captures repeatable methods; `skills/` captures executable or semi-structured abilities.
-- `data/` is for planning and measurement, not raw creative notes.

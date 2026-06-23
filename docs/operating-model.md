@@ -1,17 +1,21 @@
 # Operating Model
 
+This is an ArcSocial project-level document. User content lives under
+`<workspacePath>`, which defaults to `workspace/`.
+
 ## Weekly Rhythm
 
-- Capture inputs continuously in `inbox/`.
-- Review `inbox/ideas/` and select candidates for `content/drafts/`.
-- Prepare platform-specific versions in `platforms/`.
-- Move finished items to `content/ready/`.
-- Archive published versions in `content/published/`.
-- Record results in `data/metrics/`.
+- Capture inputs continuously in `<workspacePath>/inbox/`.
+- Review `<workspacePath>/inbox/ideas/` and select candidates for `<workspacePath>/content/drafts/`.
+- Prepare platform-specific versions in `<workspacePath>/platforms/`.
+- Move finished items to `<workspacePath>/content/ready/`.
+- Archive published versions in `<workspacePath>/content/published/`.
+- Record results in `<workspacePath>/data/metrics/`.
 
 ## Repository Boundary
 
-This repository stores content operations and reusable tooling. It should not become a general notes archive.
+ArcSocial stores content operations and reusable tooling. The data workspace
+stores personal social publishing data. Neither should become a general notes
+archive.
 
 Keep durable personal knowledge elsewhere unless it directly supports social publishing.
-
