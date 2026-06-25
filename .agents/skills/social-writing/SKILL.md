@@ -157,6 +157,7 @@ The canonical version before platform adaptation.
 
 - 人工可编辑的平台稿写到 `<workspacePath>/platforms/wechat/`。
 - 不把这个文件当作最终渲染形态。
+- 如果用户要发公众号图片消息/小绿书，在 `## Publish Metadata` 中写 `- Type: image`，并在正文放图片或填写 `- Image List: path1, path2`。
 - 当用户要求本地预览、草稿箱准备或发布时，交给 `wechat-draft`；它会在 `<workspacePath>/publishing/wechat/` 下生成预览和 Wenyan 产物，并自动应用发布层排版与安全处理。
 - 不在本 skill 中重复处理公众号预览职责，包括选择最近已发布文章作为风格参考、生成 Wenyan 输入、列表安全转换、最终本地预览。
 - 如果做公众号适配时进行了内容层面的调整，必须明确说明，并确保标准草稿仍可追溯。

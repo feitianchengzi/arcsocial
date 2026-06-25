@@ -50,6 +50,7 @@ def data_path(*parts: str) -> Path:
 class Article:
     source: Path
     slug: str
+    article_type: str
     title: str
     author: str
     digest: str
@@ -57,6 +58,7 @@ class Article:
     content_html: str
     content_source_url: str
     cover: str
+    image_list: list[str]
     thumb_media_id: str
     show_cover_pic: int
     need_open_comment: int
@@ -118,6 +120,20 @@ def parse_metadata(block: str) -> dict[str, str]:
         key, value = stripped[2:].split(":", 1)
         metadata[normalize_key(key)] = value.strip()
     return metadata
+
+
+def parse_list_value(value: str) -> list[str]:
+    if not value:
+        return []
+    stripped = value.strip()
+    if stripped.startswith("["):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = []
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    return [part.strip() for part in re.split(r"[,;，；]", stripped) if part.strip()]
 
 
 def parse_toml_string(value: str) -> str:
@@ -199,6 +215,13 @@ def image_refs(markdown: str) -> list[tuple[str, str]]:
     return refs
 
 
+def normalize_asset_ref(path_text: str, source: Path) -> str:
+    resolved = resolve_local_asset(path_text, source)
+    if not resolved:
+        return path_text
+    return relative_to_publish_dir(str(resolved))
+
+
 def normalize_markdown_image_paths(markdown: str, source: Path) -> str:
     def replace(match: re.Match[str]) -> str:
         alt, src = match.groups()
@@ -208,6 +231,22 @@ def normalize_markdown_image_paths(markdown: str, source: Path) -> str:
         return f"![{alt}]({relative_to_publish_dir(str(resolved))})"
 
     return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace, markdown)
+
+
+def remove_markdown_images(markdown: str) -> str:
+    lines = []
+    for line in markdown.splitlines():
+        if re.match(r"^\s*!\[[^\]]*\]\([^)]+\)\s*$", line):
+            continue
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def plain_text_from_markdown(markdown: str) -> str:
+    plain = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", markdown)
+    plain = re.sub(r"^#+\s*", "", plain, flags=re.MULTILINE)
+    plain = re.sub(r"[`*_>#-]", "", plain)
+    return re.sub(r"\s+", " ", plain).strip()
 
 
 def prompt_sidecar_for(path_text: str, source: Path) -> Path | None:
@@ -225,6 +264,7 @@ def asset_notes(article: Article) -> list[AssetNote]:
     seen: set[Path] = set()
     candidates = [("cover", article.cover)]
     candidates.extend((alt or "body image", src) for alt, src in image_refs(article.content_markdown))
+    candidates.extend(("image message", src) for src in article.image_list)
     for label, path_text in candidates:
         prompt_path = prompt_sidecar_for(path_text, article.source)
         if not prompt_path or prompt_path in seen:
@@ -453,22 +493,43 @@ def build_article(source: Path) -> Article:
     metadata = parse_metadata(section(text, "Publish Metadata"))
     warnings: list[str] = list_warnings
 
+    raw_type = metadata.get("type") or metadata.get("article_type") or metadata.get("content_type", "")
+    article_type = "image" if raw_type.lower() in {"image", "newspic", "图片", "图片消息", "小绿书"} else "news"
     title = metadata.get("title") or first_heading(adapted) or first_heading(text) or source.stem
     author = metadata.get("author", "")
     digest = metadata.get("digest") or metadata.get("caption", "")
     content_source_url = metadata.get("content_source_url", "")
     cover = metadata.get("cover") or metadata.get("cover_url") or metadata.get("cover_path", "")
+    explicit_image_list = parse_list_value(metadata.get("image_list", metadata.get("images", "")))
+    image_list = [normalize_asset_ref(item, source) for item in explicit_image_list]
+    if article_type == "image" and not image_list:
+        image_list = [src for _, src in image_refs(adapted)]
+    content_markdown = remove_markdown_images(adapted) if article_type == "image" else adapted
     thumb_media_id = metadata.get("cover_media_id") or metadata.get("thumb_media_id", "")
     show_cover_pic = parse_int(metadata.get("show_cover", metadata.get("show_cover_pic", "0")), 0)
     need_open_comment = parse_int(metadata.get("need_open_comment", "0"), 0)
     only_fans_can_comment = parse_int(metadata.get("only_fans_can_comment", "0"), 0)
-    content_html = markdown_to_wechat_html(adapted)
+    content_html = markdown_to_wechat_html(content_markdown)
     style_reference = latest_style_reference(source)
     content_change_scope = "publishing-safety"
 
-    if not cover and not thumb_media_id:
+    if article_type == "image":
+        if not image_list:
+            warnings.append("missing image_list: Wenyan image messages require images in body or Publish Metadata Image List.")
+        if len(image_list) > 20:
+            warnings.append(f"image_list has {len(image_list)} images; Wenyan image messages support at most 20.")
+        if len(title) > 20:
+            warnings.append(f"image message title exceeds 20 characters: {len(title)} characters.")
+        if not cover and image_list:
+            cover = image_list[0]
+        body_plain = plain_text_from_markdown(content_markdown)
+        if len(body_plain) < 80:
+            warnings.append("image message lower body is very short; make sure it is reader-facing and adds value beyond describing the draft.")
+        if re.search(r"(草稿|用\s*\d+\s*张图|这是一版)", body_plain):
+            warnings.append("image message lower body may be creator-facing; rewrite it for the public reader and the post objective.")
+    elif not cover and not thumb_media_id:
         warnings.append("missing cover: Wenyan requires a cover image or at least one body image.")
-    if not digest:
+    if article_type != "image" and not digest:
         warnings.append("missing digest: do not rely on WeChat defaults for final copy.")
     if len(title) > 64:
         warnings.append(f"title may be too long for WeChat conventions: {len(title)} characters.")
@@ -477,20 +538,25 @@ def build_article(source: Path) -> Article:
     if len(content_html.encode("utf-8")) > 1024 * 1024:
         warnings.append("content HTML is larger than 1MB.")
     if re.search(r'<img src="(?!https?://)', content_html):
-        warnings.append("content contains local body image paths; Wenyan should upload them, but the fallback direct API payload would need WeChat-hosted image URLs.")
+        if article_type == "image":
+            warnings.append("image message contains local image paths; Wenyan should upload them and produce image media ids.")
+        else:
+            warnings.append("content contains local body image paths; Wenyan should upload them, but the fallback direct API payload would need WeChat-hosted image URLs.")
     if re.search(r'<img src="https?://', content_html):
         warnings.append("content contains remote image URLs; WeChat may filter non-WeChat image hosts.")
 
     return Article(
         source=source,
         slug=slug_for(source),
+        article_type=article_type,
         title=title,
         author=author,
         digest=digest,
-        content_markdown=adapted,
+        content_markdown=content_markdown,
         content_html=content_html,
         content_source_url=content_source_url,
         cover=cover,
+        image_list=image_list,
         thumb_media_id=thumb_media_id,
         show_cover_pic=show_cover_pic,
         need_open_comment=need_open_comment,
@@ -514,6 +580,25 @@ def suggested_digest(article: Article) -> str:
 
 
 def payload_for(article: Article) -> dict[str, Any]:
+    if article.article_type == "image":
+        item = {
+            "article_type": "newspic",
+            "title": article.title,
+            "content": article.content_html,
+            "need_open_comment": article.need_open_comment,
+            "only_fans_can_comment": article.only_fans_can_comment,
+            "image_info": {
+                "image_list": [
+                    {
+                        "image_media_id": "",
+                        "_source_path": src,
+                    }
+                    for src in article.image_list
+                ]
+            },
+        }
+        return {"articles": [item]}
+
     item = {
         "article_type": "news",
         "title": article.title,
@@ -578,15 +663,39 @@ def resolve_preview_asset(path_text: str) -> str:
     if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", path_text):
         return path_text
     p = Path(path_text)
+    candidates = [p]
     if not p.is_absolute():
-        p = Path.cwd() / p
-    try:
-        return os.path.relpath(p, PUBLISH_DIR)
-    except ValueError:
-        return str(p)
+        candidates = [
+            PUBLISH_DIR / p,
+            WORKSPACE_DIR / p,
+            Path.cwd() / p,
+        ]
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                return os.path.relpath(candidate.resolve(), PUBLISH_DIR)
+            except ValueError:
+                return str(candidate)
+    if p.is_absolute():
+        try:
+            return os.path.relpath(p, PUBLISH_DIR)
+        except ValueError:
+            return str(p)
+    return path_text
 
 
 def platform_api_fields(article: Article) -> list[tuple[str, str, str]]:
+    if article.article_type == "image":
+        return [
+            ("article_type", "newspic", "WeChat draft/add image-message article type"),
+            ("title", article.title, "from Publish Metadata Title or first H1"),
+            ("content", f"HTML {len(article.content_html)} chars / {len(article.content_html.encode('utf-8'))} bytes", "image message description/content"),
+            ("image_list", f"{len(article.image_list)} image(s)", "Wenyan uploads these images; fallback payload shows source paths"),
+            ("need_open_comment", str(article.need_open_comment), "Wenyan frontmatter/direct API"),
+            ("only_fans_can_comment", str(article.only_fans_can_comment), "Wenyan frontmatter/direct API"),
+            ("cover", article.cover, "first image by default unless explicitly set"),
+        ]
+
     return [
         ("article_type", "news", "WeChat draft/add article type"),
         ("title", article.title, "from Publish Metadata Title or first H1"),
@@ -603,6 +712,9 @@ def platform_api_fields(article: Article) -> list[tuple[str, str, str]]:
 
 
 def full_preview_html(article: Article, wenyan_path: Path, fallback_payload_path: Path, report_path: Path) -> str:
+    if article.article_type == "image":
+        return image_message_preview_html(article, wenyan_path, fallback_payload_path, report_path)
+
     cover_src = resolve_preview_asset(article.cover)
     cover_html = (
         f'<img class="cover" src="{html.escape(cover_src, quote=True)}" alt="cover" />'
@@ -699,6 +811,144 @@ def full_preview_html(article: Article, wenyan_path: Path, fallback_payload_path
 """
 
 
+def image_message_preview_html(
+    article: Article,
+    wenyan_path: Path,
+    fallback_payload_path: Path,
+    report_path: Path,
+) -> str:
+    rows = "\n".join(
+        "<tr>"
+        f"<td>{html.escape(name)}</td>"
+        f"<td>{html.escape(value or '(empty)')}</td>"
+        f"<td>{html.escape(note)}</td>"
+        "</tr>"
+        for name, value, note in platform_api_fields(article)
+    )
+    note_blocks = "\n".join(
+        '<details class="asset-note">'
+        f"<summary>{html.escape(note.label)}: {html.escape(note.asset_path)}</summary>"
+        f"<div class=\"note-path\">{html.escape(str(note.prompt_path))}</div>"
+        f"<pre>{html.escape(note.content)}</pre>"
+        "</details>"
+        for note in asset_notes(article)
+    )
+    notes_html = (
+        f"<section><h2>Image Generation Notes</h2>{note_blocks}</section>"
+        if note_blocks
+        else ""
+    )
+    slides = "\n".join(
+        '<figure class="slide">'
+        f'<img src="{html.escape(resolve_preview_asset(src), quote=True)}" alt="image message {index}" />'
+        f"<figcaption>{index} / {len(article.image_list)}</figcaption>"
+        "</figure>"
+        for index, src in enumerate(article.image_list, start=1)
+    )
+    if not slides:
+        slides = '<div class="missing-images">No image_list configured</div>'
+    cover_audit = " / ".join(
+        [
+            "type=image",
+            f"image_list={len(article.image_list)}",
+            "standalone cover not emitted to Wenyan",
+            f"first image cover={article.image_list[0] if article.image_list else '(missing)'}",
+        ]
+    )
+    escaped_wenyan = html.escape(str(wenyan_path))
+    escaped_payload = html.escape(str(fallback_payload_path))
+    escaped_report = html.escape(str(report_path))
+    escaped_style_reference = html.escape(article.style_reference or "none found")
+    escaped_change_scope = html.escape(article.content_change_scope)
+    escaped_cover_audit = html.escape(cover_audit)
+    lower_body = article.content_html or '<p class="empty-body">No lower body configured</p>'
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(article.title)} - WeChat Image Message Preview</title>
+  <style>
+    body {{ margin: 0; background: #e8edf2; color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 28px 18px 56px; }}
+    .layout {{ display: grid; grid-template-columns: minmax(330px, 420px) minmax(0, 1fr); gap: 28px; align-items: start; }}
+    .phone {{ border: 1px solid #cfd7e2; background: #f6f8fb; border-radius: 28px; padding: 12px; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.16); }}
+    .screen {{ overflow: hidden; border-radius: 22px; background: #fff; min-height: 720px; }}
+    .topbar {{ height: 44px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #eef1f5; font-size: 14px; font-weight: 600; color: #111827; }}
+    .carousel {{ display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; background: #111827; }}
+    .slide {{ position: relative; flex: 0 0 100%; margin: 0; scroll-snap-align: start; aspect-ratio: 3 / 4; background: #111827; }}
+    .slide img {{ display: block; width: 100%; height: 100%; object-fit: contain; }}
+    .slide figcaption {{ position: absolute; right: 12px; bottom: 12px; padding: 3px 8px; border-radius: 999px; background: rgba(17, 24, 39, 0.72); color: #fff; font-size: 12px; }}
+    .fixed-body {{ padding: 20px 18px 28px; border-top: 1px solid #eef1f5; }}
+    .fixed-body h1 {{ margin: 0 0 14px; font-size: 21px; line-height: 1.35; letter-spacing: 0; }}
+    .fixed-body p {{ font-size: 15px !important; line-height: 1.75 !important; color: #1f2933 !important; }}
+    .fixed-body blockquote {{ font-size: 15px !important; }}
+    .empty-body, .missing-images {{ padding: 24px; color: #6b7280; text-align: center; }}
+    section {{ margin: 0 0 24px; }}
+    h2 {{ margin: 0 0 12px; font-size: 18px; }}
+    table {{ width: 100%; border-collapse: collapse; background: #fff; font-size: 14px; }}
+    th, td {{ border: 1px solid #d7dde5; padding: 9px 10px; text-align: left; vertical-align: top; }}
+    th {{ background: #f6f8fb; }}
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .paths {{ color: #4b5563; line-height: 1.7; font-size: 14px; background: #fff; border: 1px solid #d7dde5; padding: 12px 14px; }}
+    .audit {{ margin: 0 0 14px; padding: 10px 12px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; line-height: 1.6; font-size: 14px; }}
+    .asset-note {{ margin: 0 0 12px; background: #fff; border: 1px solid #d7dde5; }}
+    .asset-note summary {{ cursor: pointer; padding: 10px 12px; font-weight: 600; }}
+    .note-path {{ padding: 0 12px 8px; color: #6b7280; font-size: 13px; }}
+    .asset-note pre {{ margin: 0; padding: 12px; white-space: pre-wrap; background: #f8fafc; border-top: 1px solid #d7dde5; line-height: 1.55; }}
+    @media (max-width: 820px) {{
+      main {{ padding: 16px 10px 36px; }}
+      .layout {{ grid-template-columns: 1fr; }}
+      .phone {{ max-width: 420px; margin: 0 auto; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="layout">
+      <section class="phone" aria-label="image message local preview">
+        <div class="screen">
+          <div class="topbar">公众号图片消息预览</div>
+          <div class="carousel">{slides}</div>
+          <article class="fixed-body">
+            <h1>{html.escape(article.title)}</h1>
+            {lower_body}
+          </article>
+        </div>
+      </section>
+      <div>
+        <section>
+          <h2>Preview Artifacts</h2>
+          <div class="paths">
+            Wenyan input: <code>{escaped_wenyan}</code><br>
+            Fallback payload: <code>{escaped_payload}</code><br>
+            Report: <code>{escaped_report}</code>
+          </div>
+        </section>
+        <section>
+          <h2>Image Message Audit</h2>
+          <div class="audit">{escaped_cover_audit}</div>
+          <table>
+            <thead><tr><th>Field</th><th>Actual value</th><th>Source / note</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </section>
+        <section>
+          <h2>Publishing Style Pass</h2>
+          <div class="paths">
+            Style reference: <code>{escaped_style_reference}</code><br>
+            Content change scope: <code>{escaped_change_scope}</code>
+          </div>
+        </section>
+        {notes_html}
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
 def report_markdown(
     article: Article,
     payload_path: Path,
@@ -710,12 +960,18 @@ def report_markdown(
     )
     warnings = "\n".join(f"- {warning}" for warning in article.warnings) or "- none"
     suggestions = []
-    if not article.digest:
+    if article.article_type != "image" and not article.digest:
         suggestions.append(f"- Digest: {suggested_digest(article)}")
-    if not article.cover and not article.thumb_media_id:
+    if article.article_type == "image" and not article.image_list:
+        suggestions.append("- Image List: add body images or `- Image List:` under `## Publish Metadata`.")
+    elif article.article_type != "image" and not article.cover and not article.thumb_media_id:
         suggestions.append("- Cover: provide a local cover path, remote cover URL, or body image.")
     suggested_block = "\n".join(suggestions) or "- none"
     full_preview_line = f"- Full Preview HTML: `{full_preview_path}`\n" if full_preview_path else ""
+    if article.article_type == "image":
+        preview_note = "- Full Preview HTML uses the image-message template: horizontal image list, fixed lower body, and field/cover audit."
+    else:
+        preview_note = "- Full Preview HTML shows the API/Wenyan field matrix, cover, digest, and rendered body together."
     notes = asset_notes(article)
     if notes:
         asset_note_block = "\n\n".join(
@@ -733,7 +989,7 @@ def report_markdown(
 - Markdown: `{article.source}`
 - Style Reference: `{article.style_reference or 'none found'}`
 - Content Change Scope: `{article.content_change_scope}`
-{full_preview_line}- Full Preview HTML shows the API/Wenyan field matrix, cover, digest, and rendered body together.
+{full_preview_line}{preview_note}
 - Fallback Payload JSON: `{payload_path}`
 
 ## Publishing Style Pass
@@ -772,7 +1028,11 @@ def report_markdown(
 
 def wenyan_frontmatter(article: Article) -> dict[str, Any]:
     data: dict[str, Any] = {"title": article.title}
-    if article.cover:
+    if article.article_type == "image":
+        data["type"] = "image"
+        if article.image_list:
+            data["image_list"] = [relative_to_publish_dir(item) for item in article.image_list]
+    if article.cover and article.article_type != "image":
         data["cover"] = relative_to_publish_dir(article.cover)
     if article.author:
         data["author"] = article.author
@@ -786,6 +1046,8 @@ def wenyan_frontmatter(article: Article) -> dict[str, Any]:
 
 
 def yaml_scalar(value: Any) -> str:
+    if isinstance(value, list):
+        return "\n" + "\n".join(f"  - {yaml_scalar(item)}" for item in value)
     if isinstance(value, int):
         return str(value)
     text = str(value)
@@ -814,7 +1076,11 @@ def render_wenyan_markdown(article: Article) -> str:
     frontmatter = wenyan_frontmatter(article)
     lines = ["---"]
     for key, value in frontmatter.items():
-        lines.append(f"{key}: {yaml_scalar(value)}")
+        rendered = yaml_scalar(value)
+        if rendered.startswith("\n"):
+            lines.append(f"{key}:{rendered}")
+        else:
+            lines.append(f"{key}: {rendered}")
     lines.append("---")
     lines.append("")
     lines.append(content_markdown_for_wenyan(article))
@@ -902,7 +1168,7 @@ def command_prepare_wenyan(args: argparse.Namespace) -> None:
             print("Warnings:", file=sys.stderr)
             for warning in article.warnings:
                 print(f"- {warning}", file=sys.stderr)
-        if not article.digest:
+        if article.article_type != "image" and not article.digest:
             print(f"Suggested Digest: {suggested_digest(article)}", file=sys.stderr)
         return
     PUBLISH_DIR.mkdir(parents=True, exist_ok=True)
@@ -913,7 +1179,7 @@ def command_prepare_wenyan(args: argparse.Namespace) -> None:
         print("warnings:")
         for warning in article.warnings:
             print(f"- {warning}")
-    if not article.digest:
+    if article.article_type != "image" and not article.digest:
         print(f"suggested_digest: {suggested_digest(article)}")
 
 
@@ -956,6 +1222,7 @@ def command_doctor(args: argparse.Namespace) -> None:
     print("- Title: from Publish Metadata or the first H1")
     print("- Digest: `- Digest:` under `## Publish Metadata`")
     print("- Cover: local path, remote URL, or Wenyan-supported cover metadata")
+    print("- Image message: `- Type: image` plus body images or `- Image List:` under `## Publish Metadata`")
     print("- Cover quality: use a generated or user-provided bitmap; this script does not generate covers")
     print("- Content: `## Adapted Copy` body")
     print("")

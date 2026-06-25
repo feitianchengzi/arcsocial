@@ -19,6 +19,8 @@ description: 公众号平台发布 adapter skill，用于从数据工作区 plat
 - 在 `<workspacePath>/publishing/wechat/` 下生成本地预览产物。
 - 预览和 Wenyan 准备阶段自动应用发布层排版与安全处理，但不修改人工写作源文件。
 - 默认使用 `wenyan-mcp` 处理公众号渲染、图片上传和草稿创建。
+- 支持普通图文和 Wenyan `type: image` 图片消息；图片消息在生成的 Wenyan 输入中保留 `type: image` 和 `image_list`。
+- 图片消息和贴图文章必须先经过标题、封面字段、独立本地预览、图片质量和图文分工门禁；细则见 [`references/image-message.md`](references/image-message.md)。
 - 底层配置遵循底层工具自己的文档要求。
 - 本 skill 脚本只负责检查、报告和 Wenyan 输入生成。
 - 用户文章发布产物和非敏感发布结果放在 `<workspacePath>/publishing/` 下。
@@ -176,7 +178,7 @@ python3 .agents/skills/wechat-draft/scripts/wechat_draft.py preview workspace/pl
 
 默认只允许发布层变化：段落渲染、标题渲染、图片间距、列表安全、字段展示、预览和 Wenyan 就绪处理。只有 agent 明确执行公众号可读性优化时，才允许轻量编辑适配；这种适配必须体现在生成的预览/Wenyan 产物中，保留核心观点，不编造事实或经历，并清楚报告 `Content Change Scope`。如果改动会改变论证、增删核心观点或实质性重写文章，必须先停下询问。
 
-使用 `*.full-preview.html` 让用户做草稿创建前的必要预览。它必须展示：
+使用 `*.full-preview.html` 让用户做草稿创建前的必要预览。普通图文和图片消息必须使用不同预览体验；图片消息要模拟真实载体的横向图片轮播和固定下方正文。预览必须展示：
 
 - 当前流程能提供哪些公众号/Wenyan 字段；
 - 这篇文章实际填了哪些值；
@@ -208,6 +210,28 @@ python3 .agents/skills/wechat-draft/scripts/wechat_draft.py prepare-wenyan works
 
 当 `Publish Metadata` 包含 `Digest` 时，生成的 Wenyan Markdown 会在第一个 H1 后把摘要插入正文 blockquote；如果正文已有相同摘要，则不重复插入。这样在底层草稿 API 不单独暴露 digest 时，本地预览和公众号草稿正文仍保持一致。
 
+图片消息使用 `- Type: image`：
+
+```markdown
+## Publish Metadata
+
+- Title: 图片消息标题
+- Type: image
+- Image List: assets/wechat/body/example-1.jpg, assets/wechat/body/example-2.jpg
+```
+
+如果没有填写 `Image List`，脚本会从 `## Adapted Copy` 正文图片中提取图片列表。生成的 Wenyan 输入会写入 `type: image` 和 `image_list`；本地 fallback payload 会展示 `article_type: newspic` 结构和源图片路径，真实图片上传与 `image_media_id` 生成仍交给 Wenyan。
+
+如果是图片消息、贴图文章或用户反馈图片质量/封面异常，必须读取 [`references/image-message.md`](references/image-message.md)，并先完成图片消息策划和门禁检查：
+
+- 标题必须不超过 20 个汉字；超过时先改短标题并重新生成预览，不创建远程草稿。
+- 确认 Wenyan 输入只用 `type: image` 和 `image_list` 表达图片消息；默认不为图片消息额外写 standalone `cover` frontmatter。
+- 确认 `image_list` 第一张图就是预期封面图，并在 report 或结果摘要中说明后台封面依赖首图处理。
+- 确认本地预览使用图片消息专用模板，而不是普通图文模板。
+- 先判断图片已经承担了什么，再设计下方正文如何补强整组图片；下方正文在翻图过程中不变化，必须面向公开读者和社交发布目的合理利用，但不预设固定格式，也不做逐图讲解。
+- 平台稿可以通过正文图片推导 `image_list`；生成 Wenyan 图片消息时，图片进入 `image_list`，下方正文只保留固定展示的文字，不重复渲染整组轮播图。
+- 图片质量不满足中间区域利用、排版层级、可读字号和内容相关视觉元素时，先修策划再重做图片。
+
 如果需要封面，且用户要求 agent 生成封面，先走下面的封面质量流程，再准备 Wenyan 输入。
 
 #### 封面质量流程
@@ -238,6 +262,8 @@ cover: "../../../assets/images/example.png"
 - 每张图片的 prompt 或 rationale 保存为同 stem sidecar，例如 `<workspacePath>/assets/wechat/body/YYYY-MM-DD-slug-01.prompt.md`。
 - `<workspacePath>/platforms/wechat/*.md` 可以用数据工作区根路径（`assets/wechat/body/example.png`）或源文件相对路径引用图片。预览脚本会在生成产物中改写本地图片路径，让本地预览和 Wenyan 输入都能从 `<workspacePath>/publishing/wechat/` 正确解析。
 - 正文图片要克制使用。它们应提供节奏或解释某一节，不要重复封面，也不要引入私人家庭细节，除非用户明确批准。
+- 图片消息的下方正文不是逐图讲解区，也不能浪费。必须根据文章内容设计它如何补强整组图片，并说明为什么适合固定展示、如何避免抢走看图注意力。
+- 图片消息的下方正文必须面向读者，不写给创作者或审核者；出现“这是一版草稿”“用 N 张图讲清楚”等制作说明时，先改文案再准备远程草稿。
 
 #### 公众号列表安全
 
@@ -250,11 +276,15 @@ cover: "../../../assets/images/example.png"
 
 - 确认仓库能提供的文章元数据。
 - 确认 `*.full-preview.html` 包含 API/Wenyan 字段矩阵和已选封面。
+- 对图片消息，确认标题不超过 20 字，Wenyan frontmatter 包含 `type: image` 和 `image_list`，且没有非必要 standalone `cover`。
+- 对图片消息，确认 fallback payload 为 `article_type: newspic`，并记录第一张 `image_list` 是否承担后台封面。
+- 对图片消息，确认 `*.full-preview.html` 是图片消息专用预览：横向图片列表、固定下方正文、字段/封面审计区清晰可见。
 - 确认自动发布风格处理已运行。
 - 确认使用了哪篇最近公众号文章作为风格参考；如果没有找到，要说明。
 - 确认发布层处理没有修改源文件。
 - 确认本地 fallback `content` 是否能转换成 HTML。
 - 明确指出缺失封面、缺失摘要、字段过长、未解析本地图片或不稳定列表标记。
+- 明确指出图片消息的图片质量问题：中间区域利用不足、文字层级差、纯文字化、字号不可读、视觉元素与文章内容无关、下方正文空置、抢注意力或与图片分工不清。
 - 生成图片 sidecar 存在时，确认图片生成说明已纳入报告。
 
 ### 6. 使用 `wenyan-mcp` 做真实草稿箱写入
@@ -263,6 +293,7 @@ cover: "../../../assets/images/example.png"
 - 如果只有本地命令可用，按 `wenyan-mcp` 文档调用和配置。
 - Codex 会话中新配置的 MCP 工具有时不会热加载，这时使用 `node tools/scripts/wenyan-mcp-call.mjs`；它读取 `~/.codex/config.toml` 中的 `[mcp_servers.wenyan]`，把配置的 env/args 传给 `wenyan-mcp`，并且不打印 secret。
 - 让 Wenyan 处理最终渲染、图片上传、封面处理和公众号草稿创建。
+- 对图片消息，远程建草稿前再次确认：不是我们额外传入 standalone `cover` 字段；后台封面应来自 `image_list` 第一张图及 Wenyan/公众号平台处理。
 - 把非敏感结果摘要记录到 `<workspacePath>/publishing/wechat/`。
 - 远程建草稿调用之前必须立即停下请求确认，除非用户在当前回合已经明确批准这次远程写入。
 - 如果缺少凭证或 Wenyan 运行时，立即停止并报告前置条件，不尝试 fallback 路径。
@@ -306,6 +337,7 @@ node tools/scripts/wenyan-mcp-call.mjs tools/call publish_article '{"file":"work
 上层文章就绪状态，引导用户检查：
 
 - `Title`：文章必需。
+- 图片消息 `Title`：必须不超过 20 个汉字。
 - `Digest`：建议提供，不要依赖公众号默认摘要。
 - `Cover`：如果使用 Wenyan 封面处理，需要本地路径或远程 URL。
 - `Adapted Copy`：Wenyan 将渲染和上传的正文。
@@ -325,6 +357,15 @@ node tools/scripts/wenyan-mcp-call.mjs tools/call publish_article '{"file":"work
 元数据缺失时，先在 `<workspacePath>/publishing/wechat/` 或最终报告中生成建议。不要把建议的 `Digest`、`Cover` 或文案改动写入 `<workspacePath>/platforms/wechat/*.md`，除非用户明确要求更新源文件。
 
 对 Wenyan 来说，`cover` 或至少一张正文图片在操作上是必需的。`thumb_media_id` 属于 fallback 直连公众号 API payload，不是准备 Wenyan 输入的首选方式。
+
+图片消息封面单独遵守 [`references/image-message.md`](references/image-message.md)：默认由 `image_list` 第一张图承担，不额外制造 standalone `cover` 字段；如果公众号后台封面异常，先审计 Wenyan 输入和 fallback payload，再判断是否需要调整首图裁切或换首图。
+
+## Reference 路由
+
+- 图片消息、贴图文章、`type: image`、小绿书式公众号内容、图片质量反馈、后台封面异常：读取 [`references/image-message.md`](references/image-message.md)。
+- 新写或重做公众号平台稿且需要判断普通图文/图片消息取舍时：优先交给 `social-publishing-workflow` 做内容类型判断和用户确认；本 skill 在收到 `Type: image` 后执行图片消息门禁。
+- Wenyan 底层能力、frontmatter、图片上传和草稿箱行为：读取 [`references/wenyan-mcp.md`](references/wenyan-mcp.md)。
+- 公众号官方 API 字段、fallback payload 或 `newspic` 结构判断：读取 [`references/wechat-api.md`](references/wechat-api.md)。
 
 ## 扩展规则
 

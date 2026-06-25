@@ -1,7 +1,7 @@
 interface:
   display_name: "社交内容发布流程"
   short_description: "社交内容从想法到发布的默认入口和流程编排器。"
-  default_prompt: "优先使用 $social-publishing-workflow 作为社交内容从想法到发布的入口，识别当前阶段，主动推进下一步，调用合适的写作或平台发布 skill，并汇报产物、校准点、阻塞和下一步。"
+  default_prompt: "优先使用 $social-publishing-workflow 作为社交内容从想法到发布的入口，识别当前阶段，主动推进下一步，调用合适的写作或平台发布 skill，并汇报产物、校准点、阻塞和下一步。新写或重做平台稿时，先基于内容、读者和发布目的判断发布类型，并让用户确认；公众号至少在普通图文和图片消息之间说明推荐、备选和取舍，不要默认套用某一种类型。"
 
 policy:
   allow_implicit_invocation: true

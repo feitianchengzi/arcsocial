@@ -16,8 +16,9 @@ Chinese README: [README.md](README.md).
 
 - General writing workflow: from raw ideas to canonical drafts, then to
   platform-specific drafts.
-- WeChat Official Account: full adapter for local checks, preview generation,
-  Wenyan-ready Markdown, and confirmed draft-box creation.
+- WeChat Official Account: full adapter for standard articles and image
+  messages, including local checks, preview generation, Wenyan-ready Markdown,
+  and confirmed draft-box creation.
 - Other social platforms: ArcSocial can generate platform-specific drafts. If a
   platform adapter does not exist, it stops at "platform draft ready" instead of
   pretending remote publishing is supported.

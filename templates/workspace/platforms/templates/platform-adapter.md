@@ -26,6 +26,8 @@ Write the platform-ready version here.
 ## Publish Metadata
 
 - Title:
+- Type:
+- Image List:
 - Caption:
 - Tags:
 - Scheduled time:
@@ -36,4 +38,3 @@ Write the platform-ready version here.
 - Initial response:
 - Comments to answer:
 - Follow-up content ideas:
-
