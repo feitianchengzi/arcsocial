@@ -1,7 +1,7 @@
 interface:
   display_name: "公众号草稿"
   short_description: "公众号平台稿的预览、Wenyan 输入和草稿箱上传 adapter。"
-  default_prompt: "当已有数据工作区 platforms/wechat/ 平台稿并需要公众号发布准备时，使用 $wechat-draft 检查文章，生成 Wenyan 可用输入，并且只在预览确认后创建草稿箱上传；完整社交内容流程优先交给 $social-publishing-workflow 编排。处理 type: image、图片消息、贴图文章或后台封面异常时，必须读取 references/image-message.md，执行 20 字标题限制、image_list 首图封面审计、无非必要 standalone cover 审计、图片质量检查、图片消息专用本地预览和图片/下方正文分工判断；下方正文在翻图过程中不变化，必须面向公开读者和社交发布目的合理利用，不做逐图讲解、不预设固定格式，并且不能抢走看图注意力。图片消息的图片进入 image_list，下方正文只保留固定展示文字，不能把轮播图在正文区域重复渲染。"
+  default_prompt: "当已有数据工作区 platforms/wechat/ 平台稿并需要公众号发布准备时，使用 $wechat-draft 检查文章，生成 Wenyan 可用输入，并且只在预览确认后创建草稿箱上传；完整社交内容流程优先交给 $social-publishing-workflow 编排。预览、封面和正文图片处理时读取 workspace/preferences/ 下的公众号排版、视觉风格和可复用区块偏好；偏好只影响表现取向，不能覆盖公众号平台规则和发布门禁。处理 type: image、图片消息、贴图文章或后台封面异常时，必须读取 references/image-message.md，执行 20 字标题限制、image_list 首图封面审计、无非必要 standalone cover 审计、图片质量检查、图片消息专用本地预览和图片/下方正文分工判断；下方正文在翻图过程中不变化，必须面向公开读者和社交发布目的合理利用，不做逐图讲解、不预设固定格式，并且不能抢走看图注意力。图片消息的图片进入 image_list，下方正文只保留固定展示文字，不能把轮播图在正文区域重复渲染。"
 
 policy:
   allow_implicit_invocation: true

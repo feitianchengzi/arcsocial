@@ -19,6 +19,7 @@ description: 公众号平台发布 adapter skill，用于从数据工作区 plat
 - 在 `<workspacePath>/publishing/wechat/` 下生成本地预览产物。
 - 预览和 Wenyan 准备阶段自动应用发布层排版与安全处理，但不修改人工写作源文件。
 - 默认使用 `wenyan-mcp` 处理公众号渲染、图片上传和草稿创建。
+- 读取数据工作区中的公众号和视觉偏好，用于发布层排版、封面和正文图片判断；偏好不能覆盖公众号平台规则和发布门禁。
 - 支持普通图文和 Wenyan `type: image` 图片消息；图片消息在生成的 Wenyan 输入中保留 `type: image` 和 `image_list`。
 - 图片消息和贴图文章必须先经过标题、封面字段、独立本地预览、图片质量和图文分工门禁；细则见 [`references/image-message.md`](references/image-message.md)。
 - 底层配置遵循底层工具自己的文档要求。
@@ -83,6 +84,7 @@ description: 公众号平台发布 adapter skill，用于从数据工作区 plat
 <workspacePath>/publishing/wechat/     公众号预览产物、payload 和非敏感日志。
 <workspacePath>/platforms/wechat/      人工可编辑的公众号平台稿。
 <workspacePath>/assets/wechat/         可选封面和正文图片源资产。
+<workspacePath>/preferences/           用户公众号排版、视觉风格和可复用区块偏好。
 ```
 
 ArcSocial 项目根目录保留跨平台发布契约：
@@ -133,6 +135,7 @@ npm install -g @wenyan-md/mcp
 - 优先使用用户明确提供的路径。
 - 否则使用 `<workspacePath>/platforms/wechat/YYYY-MM-DD-slug.md`。
 - 如果只有 `<workspacePath>/content/drafts/YYYY-MM-DD-slug.md`，先通过写作流程适配到 `<workspacePath>/platforms/wechat/`。
+- 如果存在 `<workspacePath>/preferences/wechat-style.md`、`<workspacePath>/preferences/visual-style.md` 或 `<workspacePath>/preferences/reusable-blocks.md`，记录为本轮可用偏好；偏好文件不存在时不阻塞。
 
 ### 2. 重新检查环境和文章就绪状态
 
@@ -172,6 +175,7 @@ python3 .agents/skills/wechat-draft/scripts/wechat_draft.py preview workspace/pl
 
 - 查找 `<workspacePath>/publishing/wechat/*.wenyan-result.md` 下最近成功的公众号结果，映射回对应 `<workspacePath>/platforms/wechat/*.md`，并把它作为风格参考；
 - 如果没有历史结果，回退到当前文章之外最近的 `<workspacePath>/platforms/wechat/*.md`；
+- 结合 `<workspacePath>/preferences/wechat-style.md`、`visual-style.md` 和 `reusable-blocks.md` 中的用户偏好；当历史文章风格和显式用户偏好冲突时，以当前用户指令和偏好文件为准；
 - 保持 `<workspacePath>/content/` 和 `<workspacePath>/platforms/` 下的源文件不变；
 - 应用确定性的发布安全转换，包括本地图片路径规范化和列表安全转换；
 - 在 `*.report.md` 和 `*.full-preview.html` 中报告风格参考和内容变更范围。
@@ -240,6 +244,7 @@ python3 .agents/skills/wechat-draft/scripts/wechat_draft.py prepare-wenyan works
 - 同 stem 保存图片生成 prompt、意图和有用 critique：`<workspacePath>/assets/wechat/covers/YYYY-MM-DD-slug-cover.prompt.md`。
 - 封面应针对文章主题，缩略图中也能快速看懂，避免在公众号列表里不可读的小字。
 - 根据文章标题、摘要和核心隐喻设计干净的编辑型画面方向，避免通用抽象填充。
+- 如果存在 `<workspacePath>/preferences/visual-style.md`，封面方向应优先遵守其中的用户视觉偏好；没有明确偏好时遵守通用封面质量门禁。
 - 在同 stem sidecar 中保留 prompt 或 rationale，方便 `preview` 纳入报告和完整预览。不要保存 secret、私人身份细节或外部凭证。
 - 如果无法生成图片，且用户没有提供封面，远程建草稿前必须停止并报告缺少封面资产。
 
@@ -262,6 +267,7 @@ cover: "../../../assets/images/example.png"
 - 每张图片的 prompt 或 rationale 保存为同 stem sidecar，例如 `<workspacePath>/assets/wechat/body/YYYY-MM-DD-slug-01.prompt.md`。
 - `<workspacePath>/platforms/wechat/*.md` 可以用数据工作区根路径（`assets/wechat/body/example.png`）或源文件相对路径引用图片。预览脚本会在生成产物中改写本地图片路径，让本地预览和 Wenyan 输入都能从 `<workspacePath>/publishing/wechat/` 正确解析。
 - 正文图片要克制使用。它们应提供节奏或解释某一节，不要重复封面，也不要引入私人家庭细节，除非用户明确批准。
+- 正文图片和关注图如果涉及长期审美要求，先读取 `<workspacePath>/preferences/visual-style.md` 和 `reusable-blocks.md`；不要把单个用户的审美偏好写成通用图片规则。
 - 图片消息的下方正文不是逐图讲解区，也不能浪费。必须根据文章内容设计它如何补强整组图片，并说明为什么适合固定展示、如何避免抢走看图注意力。
 - 图片消息的下方正文必须面向读者，不写给创作者或审核者；出现“这是一版草稿”“用 N 张图讲清楚”等制作说明时，先改文案再准备远程草稿。
 
@@ -363,6 +369,7 @@ node tools/scripts/wenyan-mcp-call.mjs tools/call publish_article '{"file":"work
 ## Reference 路由
 
 - 图片消息、贴图文章、`type: image`、小绿书式公众号内容、图片质量反馈、后台封面异常：读取 [`references/image-message.md`](references/image-message.md)。
+- 用户公众号排版、视觉风格、固定关注区块等个人偏好：读取 `<workspacePath>/preferences/wechat-style.md`、`visual-style.md` 和 `reusable-blocks.md`；偏好归因规则见 [`../social-publishing-workflow/references/user-preferences.md`](../social-publishing-workflow/references/user-preferences.md)。
 - 新写或重做公众号平台稿且需要判断普通图文/图片消息取舍时：优先交给 `social-publishing-workflow` 做内容类型判断和用户确认；本 skill 在收到 `Type: image` 后执行图片消息门禁。
 - Wenyan 底层能力、frontmatter、图片上传和草稿箱行为：读取 [`references/wenyan-mcp.md`](references/wenyan-mcp.md)。
 - 公众号官方 API 字段、fallback payload 或 `newspic` 结构判断：读取 [`references/wechat-api.md`](references/wechat-api.md)。
@@ -388,5 +395,6 @@ source Markdown -> platform adaptation -> rendered content -> publish payload ->
 - `report`: 生成的校验报告路径，如果已创建。
 - `draft_result`: 公众号草稿结果路径，如果已创建。
 - `wenyan_result`: Wenyan MCP 响应摘要路径，如果已创建。
+- `preferences_used`: 本轮读取的公众号或视觉偏好文件；没有则写 none。
 - `needs_manual_review`: yes。
 - `next_step`: 浏览器预览、配置凭证、创建草稿，或去公众号后台检查。
